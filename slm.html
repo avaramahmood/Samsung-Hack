@@ -1,0 +1,756 @@
+<h2 class="sr-only">Complete chronological execution guide for training Qwen 2.5 7B and Phi-3-Mini through the full pipeline</h2>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-sans)}
+.phase{margin-bottom:20px;border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);overflow:hidden}
+.phase-head{padding:12px 16px;display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none}
+.phase-head:hover{background:var(--color-background-secondary)}
+.phase-tag{font-size:11px;font-weight:500;padding:2px 9px;border-radius:20px;white-space:nowrap}
+.phase-title{font-size:14px;font-weight:500;color:var(--color-text-primary);flex:1}
+.phase-sub{font-size:11px;color:var(--color-text-secondary);margin-top:1px}
+.chevron{font-size:16px;color:var(--color-text-tertiary);transition:transform .2s}
+.phase-body{padding:0 16px 14px;display:none}
+.phase-body.open{display:block}
+.step{padding:8px 0;border-bottom:0.5px solid var(--color-border-tertiary)}
+.step:last-child{border-bottom:none}
+.step-num{display:inline-block;font-size:10px;font-weight:500;padding:1px 7px;border-radius:10px;margin-bottom:4px}
+.step-title{font-size:13px;font-weight:500;color:var(--color-text-primary);margin-bottom:3px}
+.step-body{font-size:12px;color:var(--color-text-secondary);line-height:1.7}
+.code{font-family:var(--font-mono);font-size:11px;background:var(--color-background-secondary);padding:8px 10px;border-radius:6px;margin:6px 0;overflow-x:auto;white-space:pre;line-height:1.6;border:0.5px solid var(--color-border-tertiary)}
+.ds-table{width:100%;font-size:11px;border-collapse:collapse;margin:6px 0}
+.ds-table th{text-align:left;font-weight:500;color:var(--color-text-secondary);padding:4px 6px;border-bottom:0.5px solid var(--color-border-tertiary)}
+.ds-table td{padding:4px 6px;color:var(--color-text-primary);border-bottom:0.5px solid var(--color-border-tertiary)}
+.ds-table tr:last-child td{border-bottom:none}
+.pill{font-size:10px;padding:1px 6px;border-radius:8px;font-weight:500;display:inline-block}
+.warn{font-size:11px;padding:6px 10px;border-radius:6px;margin-top:6px}
+.ckpt{font-size:11px;padding:6px 10px;border-radius:6px;margin-top:6px;background:var(--color-background-info);color:var(--color-text-info);border:0.5px solid var(--color-border-info)}
+.model-tabs{display:flex;gap:6px;margin:8px 0}
+.model-tab{font-size:11px;padding:3px 10px;border-radius:20px;border:0.5px solid var(--color-border-tertiary);cursor:pointer;color:var(--color-text-secondary);background:transparent}
+.model-tab.active{background:var(--color-background-info);color:var(--color-text-info);border-color:var(--color-border-info)}
+.model-content{display:none}
+.model-content.active{display:block}
+.progress-bar{height:4px;border-radius:2px;background:var(--color-border-tertiary);margin:6px 0;overflow:hidden}
+.progress-fill{height:100%;border-radius:2px}
+</style>
+
+<div style="padding:12px 0 6px;font-size:13px;color:var(--color-text-secondary)">Click any phase to expand. Follow in order — never skip a phase.</div>
+
+<!-- PHASE 0 -->
+<div class="phase">
+  <div class="phase-head" onclick="toggle(this)">
+    <span class="phase-tag" style="background:#D3D1C7;color:#444441">Phase 0</span>
+    <div style="flex:1"><div class="phase-title">Environment setup — before anything else</div><div class="phase-sub">One time only · ~1 hour</div></div>
+    <span class="chevron">›</span>
+  </div>
+  <div class="phase-body">
+    <div class="step">
+      <div class="step-num" style="background:#E6F1FB;color:#185FA5">Step 1</div>
+      <div class="step-title">Create a Kaggle account and enable GPU</div>
+      <div class="step-body">Go to kaggle.com → account settings → phone verify → this unlocks GPU access. In any notebook: Settings → Accelerator → select GPU T4×2 for free tier, or the competition GPU if inside the Nemotron competition.</div>
+    </div>
+    <div class="step">
+      <div class="step-num" style="background:#E6F1FB;color:#185FA5">Step 2</div>
+      <div class="step-title">Create a HuggingFace account</div>
+      <div class="step-body">Go to huggingface.co → sign up → go to Settings → Access Tokens → New Token → select "write" permission → copy this token. You will use it everywhere. Store it in Kaggle: go to Kaggle → your profile → secrets → add HF_TOKEN.</div>
+    </div>
+    <div class="step">
+      <div class="step-num" style="background:#E6F1FB;color:#185FA5">Step 3</div>
+      <div class="step-title">Create a HuggingFace repository for your checkpoints</div>
+      <div class="step-body">On huggingface.co → New Model → name it "riva-qwen-checkpoints" and another "riva-phi-checkpoints" → set both to private. Every checkpoint you save goes here. This is your persistent storage across Kaggle sessions.</div>
+    </div>
+    <div class="step">
+      <div class="step-num" style="background:#E6F1FB;color:#185FA5">Step 4</div>
+      <div class="step-title">Install libraries in every new Kaggle session</div>
+      <div class="step-body">Paste this at the top of every notebook you create:</div>
+      <div class="code">!pip install -q unsloth trl transformers datasets accelerate bitsandbytes peft wandb huggingface_hub
+import os
+os.environ["HF_TOKEN"] = "your_token_here"  # or use Kaggle secrets
+os.environ["WANDB_API_KEY"] = "your_wandb_key"  # sign up at wandb.ai</div>
+    </div>
+    <div class="step">
+      <div class="step-num" style="background:#E6F1FB;color:#185FA5">Step 5</div>
+      <div class="step-title">Understand Kaggle session limits</div>
+      <div class="step-body">Each session = max 12 hours. After 12 hours the session dies and unsaved work is lost. Your workflow is: train → save to HuggingFace → new session → load from HuggingFace → continue. Never rely on local Kaggle disk for checkpoints.</div>
+      <div class="warn" style="background:var(--color-background-danger);color:var(--color-text-danger);border:0.5px solid var(--color-border-danger)">⚠ Set a timer for 10 hours when you start training. Push checkpoint to HuggingFace before the 12 hour mark no matter what.</div>
+    </div>
+  </div>
+</div>
+
+<!-- PHASE 1 -->
+<div class="phase">
+  <div class="phase-head" onclick="toggle(this)">
+    <span class="phase-tag" style="background:#B5D4F4;color:#0C447C">Phase 1</span>
+    <div style="flex:1"><div class="phase-title">Download models and run baselines</div><div class="phase-sub">Session 1 · ~2 hours · establishes what you need to beat</div></div>
+    <span class="chevron">›</span>
+  </div>
+  <div class="phase-body">
+    <div class="step">
+      <div class="step-num" style="background:#E6F1FB;color:#185FA5">Step 1</div>
+      <div class="step-title">Download both models from HuggingFace</div>
+      <div class="code">from unsloth import FastLanguageModel
+
+# Qwen 2.5 7B
+qwen_model, qwen_tokenizer = FastLanguageModel.from_pretrained(
+    model_name = "Qwen/Qwen2.5-7B",  # base not instruct
+    max_seq_length = 2048,
+    dtype = None,  # auto detects bf16 on Blackwell
+    load_in_4bit = False,  # full precision for now
+)
+
+# Phi-3-Mini (in a separate notebook)
+phi_model, phi_tokenizer = FastLanguageModel.from_pretrained(
+    model_name = "microsoft/Phi-3-mini-4k-instruct",
+    max_seq_length = 4096,
+    dtype = None,
+    load_in_4bit = False,
+)</div>
+    </div>
+    <div class="step">
+      <div class="step-num" style="background:#E6F1FB;color:#185FA5">Step 2</div>
+      <div class="step-title">Run baseline evaluation — save these numbers</div>
+      <div class="step-body">This tells you your starting point. Run before ANY training.</div>
+      <div class="code">from datasets import load_dataset
+from transformers import pipeline
+
+# Load eval datasets
+gsm8k = load_dataset("openai/gsm8k", "main", split="test")
+mmlu = load_dataset("cais/mmlu", "all", split="test[:500]")  # 500 sample subset
+stratqa = load_dataset("tau/strategyqa", split="test")
+
+# Simple eval function
+def evaluate_gsm8k(model, tokenizer, n=100):
+    correct = 0
+    for i, example in enumerate(gsm8k.select(range(n))):
+        prompt = f"Question: {example['question']}\nAnswer:"
+        inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
+        output = model.generate(**inputs, max_new_tokens=256)
+        answer = tokenizer.decode(output[0], skip_special_tokens=True)
+        if example['answer'].split("####")[-1].strip() in answer:
+            correct += 1
+    return correct / n * 100
+
+baseline_gsm8k = evaluate_gsm8k(qwen_model, qwen_tokenizer)
+print(f"Baseline GSM8K: {baseline_gsm8k:.1f}%")
+# Save this number — it is sacred</div>
+    </div>
+    <div class="ckpt">📌 Checkpoint action: Save baseline scores in a text file in your HuggingFace repo. These are your reference for the entire project.</div>
+    </div>
+</div>
+
+<!-- PHASE 2 -->
+<div class="phase">
+  <div class="phase-head" onclick="toggle(this)">
+    <span class="phase-tag" style="background:#9FE1CB;color:#085041">Phase 2</span>
+    <div style="flex:1"><div class="phase-title">Pre-generate MMLU CoT data — offline pass</div><div class="phase-sub">Session 1 continued · ~1 hour · do once, reuse everywhere</div></div>
+    <span class="chevron">›</span>
+  </div>
+  <div class="phase-body">
+    <div class="step">
+      <div class="step-num" style="background:#E1F5EE;color:#0F6E56">Why this step exists</div>
+      <div class="step-title">MMLU has no CoT answers — you generate them yourself</div>
+      <div class="step-body">MMLU only has multiple choice answers A/B/C/D. For SFT you need reasoning chains. You use the base model itself to generate these, then train on them. This is called self-distillation and is a standard technique.</div>
+    </div>
+    <div class="step">
+      <div class="step-num" style="background:#E1F5EE;color:#0F6E56">Step 1</div>
+      <div class="step-title">Generate CoT answers for MMLU</div>
+      <div class="code">from datasets import load_dataset
+import json
+
+mmlu_train = load_dataset("cais/mmlu", "all", split="auxiliary_train")
+# Use auxiliary_train — this is the safe split, never touches test
+
+cot_data = []
+for i, example in enumerate(mmlu_train.select(range(20000))):
+    prompt = f"""Question: {example['question']}
+Choices: A) {example['choices'][0]} B) {example['choices'][1]} C) {example['choices'][2]} D) {example['choices'][3]}
+Think step by step, then give your answer as A, B, C, or D.
+Answer:"""
+    
+    inputs = qwen_tokenizer(prompt, return_tensors="pt").to("cuda")
+    output = qwen_model.generate(**inputs, max_new_tokens=300, temperature=0.1)
+    reasoning = qwen_tokenizer.decode(output[0], skip_special_tokens=True)
+    
+    cot_data.append({
+        "question": example['question'],
+        "choices": example['choices'],
+        "answer": example['answer'],
+        "subject": example['subject'],
+        "cot_reasoning": reasoning,
+    })
+    
+    if i % 500 == 0:
+        print(f"Generated {i}/20000")
+
+# Save to HuggingFace dataset
+from datasets import Dataset
+Dataset.from_list(cot_data).push_to_hub("your-username/mmlu-cot-20k", private=True)</div>
+      <div class="ckpt">📌 Checkpoint action: Push mmlu-cot-20k to HuggingFace. You will load this in every subsequent training session — never regenerate.</div>
+    </div>
+  </div>
+</div>
+
+<!-- PHASE 3 -->
+<div class="phase">
+  <div class="phase-head" onclick="toggle(this)">
+    <span class="phase-tag" style="background:#FAC775;color:#633806">Phase 3</span>
+    <div style="flex:1"><div class="phase-title">Basic SFT — learn the technique first</div><div class="phase-sub">Session 2 · ~3 hours · do this before PEAR SFT</div></div>
+    <span class="chevron">›</span>
+  </div>
+  <div class="phase-body">
+    <div class="step">
+      <div class="step-num" style="background:#FAEEDA;color:#633806">Why basic SFT first</div>
+      <div class="step-title">Standard SFT is PEAR SFT without importance weights</div>
+      <div class="step-body">Get standard SFT working and producing results first. This validates your data pipeline, training loop, and eval setup. Only then layer PEAR on top. If you jump to PEAR immediately and something breaks, you won't know if it's the data or the importance weights.</div>
+    </div>
+    <div class="step">
+      <div class="step-num" style="background:#FAEEDA;color:#633806">Step 1</div>
+      <div class="step-title">Build your dataset for both models</div>
+
+      <div class="model-tabs">
+        <div class="model-tab active" onclick="switchTab(this,'qwen-sft')">Qwen 2.5 7B</div>
+        <div class="model-tab" onclick="switchTab(this,'phi-sft')">Phi-3-Mini</div>
+      </div>
+
+      <div class="model-content active" id="qwen-sft">
+        <div style="margin:6px 0;font-size:11px;font-weight:500;color:var(--color-text-secondary)">Qwen dataset composition — 100K total</div>
+        <table class="ds-table">
+          <tr><th>Dataset (HuggingFace ID)</th><th>Samples</th><th>%</th><th>Target</th></tr>
+          <tr><td>nvidia/OpenMathInstruct-2</td><td>35K</td><td>35%</td><td><span class="pill" style="background:#E6F1FB;color:#185FA5">GSM8K</span></td></tr>
+          <tr><td>openai/gsm8k train</td><td>7.5K</td><td>7.5%</td><td><span class="pill" style="background:#E6F1FB;color:#185FA5">GSM8K</span></td></tr>
+          <tr><td>tau/strategyqa train</td><td>2.3K</td><td>2.3%</td><td><span class="pill" style="background:#E1F5EE;color:#0F6E56">StrategyQA</span></td></tr>
+          <tr><td>your-username/mmlu-cot-20k</td><td>20K</td><td>20%</td><td><span class="pill" style="background:#EEEDFE;color:#534AB7">MMLU</span></td></tr>
+          <tr><td>hotpotqa/hotpot_qa (distractor)</td><td>10K</td><td>10%</td><td><span class="pill" style="background:#E1F5EE;color:#0F6E56">StrategyQA</span></td></tr>
+          <tr><td>tau/commonsense_qa</td><td>5K</td><td>5%</td><td><span class="pill" style="background:#E1F5EE;color:#0F6E56">StrategyQA</span></td></tr>
+          <tr><td>ThoughtSource (allenai/natural_questions)</td><td>20K</td><td>20%</td><td><span class="pill" style="background:#E1F5EE;color:#0F6E56">StrategyQA</span></td></tr>
+        </table>
+      </div>
+      <div class="model-content" id="phi-sft">
+        <div style="margin:6px 0;font-size:11px;font-weight:500;color:var(--color-text-secondary)">Phi dataset composition — 50K total (smaller model saturates faster)</div>
+        <table class="ds-table">
+          <tr><th>Dataset (HuggingFace ID)</th><th>Samples</th><th>%</th><th>Target</th></tr>
+          <tr><td>openai/gsm8k train (no augmentation)</td><td>7.5K</td><td>15%</td><td><span class="pill" style="background:#E6F1FB;color:#185FA5">GSM8K anchor</span></td></tr>
+          <tr><td>nvidia/OpenMathInstruct-2</td><td>5K</td><td>10%</td><td><span class="pill" style="background:#E6F1FB;color:#185FA5">GSM8K</span></td></tr>
+          <tr><td>tau/strategyqa + ThoughtSource</td><td>15K</td><td>30%</td><td><span class="pill" style="background:#E1F5EE;color:#0F6E56">StrategyQA ★</span></td></tr>
+          <tr><td>tau/commonsense_qa ECQA</td><td>5K</td><td>10%</td><td><span class="pill" style="background:#E1F5EE;color:#0F6E56">StrategyQA</span></td></tr>
+          <tr><td>your-username/mmlu-cot-20k</td><td>15K</td><td>30%</td><td><span class="pill" style="background:#EEEDFE;color:#534AB7">MMLU ★</span></td></tr>
+          <tr><td>hotpotqa/hotpot_qa</td><td>2.5K</td><td>5%</td><td><span class="pill" style="background:#E1F5EE;color:#0F6E56">StrategyQA</span></td></tr>
+        </table>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num" style="background:#FAEEDA;color:#633806">Step 2</div>
+      <div class="step-title">Standard SFT training code</div>
+      <div class="code">from unsloth import FastLanguageModel
+from trl import SFTTrainer
+from transformers import TrainingArguments
+from datasets import load_dataset, concatenate_datasets
+
+# Load model with LoRA — this is what makes it fit in memory
+model, tokenizer = FastLanguageModel.from_pretrained(
+    model_name="Qwen/Qwen2.5-7B",
+    max_seq_length=2048,
+    load_in_4bit=False,
+)
+
+model = FastLanguageModel.get_peft_model(
+    model,
+    r=16,               # LoRA rank — higher = more capacity but more memory
+    target_modules=["q_proj","k_proj","v_proj","o_proj","gate_proj","up_proj","down_proj"],
+    lora_alpha=16,
+    lora_dropout=0,
+    bias="none",
+    use_gradient_checkpointing="unsloth",
+)
+
+# Format function — every sample must look the same
+def format_sample(example):
+    return {"text": f"Question: {example['question']}\nThink step by step.\nAnswer: {example['answer']}"}
+
+# Load and combine datasets (example for GSM8K portion)
+gsm8k = load_dataset("openai/gsm8k", "main", split="train")
+gsm8k = gsm8k.map(lambda x: {"question": x["question"], "answer": x["answer"]})
+gsm8k_formatted = gsm8k.map(format_sample)
+
+# Combine all datasets here (load each one similarly)
+# combined = concatenate_datasets([gsm8k_formatted, stratqa_formatted, mmlu_formatted, ...])
+
+trainer = SFTTrainer(
+    model=model,
+    tokenizer=tokenizer,
+    train_dataset=gsm8k_formatted,  # replace with combined
+    dataset_text_field="text",
+    max_seq_length=2048,
+    args=TrainingArguments(
+        output_dir="./outputs",
+        num_train_epochs=1,
+        per_device_train_batch_size=4,
+        gradient_accumulation_steps=4,
+        learning_rate=2e-4,
+        warmup_ratio=0.05,
+        lr_scheduler_type="cosine",
+        save_steps=200,
+        logging_steps=25,
+        bf16=True,
+        report_to="wandb",
+    ),
+)
+
+trainer.train()</div>
+    </div>
+
+    <div class="step">
+      <div class="step-num" style="background:#FAEEDA;color:#633806">Step 3</div>
+      <div class="step-title">Save checkpoint to HuggingFace after training</div>
+      <div class="code">from huggingface_hub import HfApi
+
+# Save the LoRA adapter (not the full model — much smaller)
+model.save_pretrained("./sft-basic-checkpoint")
+tokenizer.save_pretrained("./sft-basic-checkpoint")
+
+# Push to your private repo
+model.push_to_hub("your-username/riva-qwen-checkpoints", 
+                   commit_message="basic-sft-checkpoint")
+tokenizer.push_to_hub("your-username/riva-qwen-checkpoints")</div>
+      <div class="ckpt">📌 Checkpoint action: Run eval on GSM8K after this. If it improved even 1%, your data pipeline is working. If it got worse, your data format is wrong — fix before moving to PEAR SFT.</div>
+    </div>
+  </div>
+</div>
+
+<!-- PHASE 4 -->
+<div class="phase">
+  <div class="phase-head" onclick="toggle(this)">
+    <span class="phase-tag" style="background:#9FE1CB;color:#085041">Phase 4</span>
+    <div style="flex:1"><div class="phase-title">PEAR SFT — Layer 1 proper</div><div class="phase-sub">Session 3 · ~4-6 hours · builds on basic SFT success</div></div>
+    <span class="chevron">›</span>
+  </div>
+  <div class="phase-body">
+    <div class="step">
+      <div class="step-num" style="background:#E1F5EE;color:#0F6E56">What PEAR adds</div>
+      <div class="step-title">Importance-weighted loss — the only difference from basic SFT</div>
+      <div class="step-body">Standard SFT treats every token equally. PEAR reweights each token's loss by how much the current model disagrees with the original base model's predictions. Tokens where the model is very confident (base and trained agree) get low weight. Tokens where RL will need to make big changes get high weight. This prepares the model specifically for RL rather than just being a good predictor.</div>
+    </div>
+    <div class="step">
+      <div class="step-num" style="background:#E1F5EE;color:#0F6E56">Step 1</div>
+      <div class="step-title">Pre-compute behavior policy log probs — one time</div>
+      <div class="code">import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+# Load base model FROZEN — this never changes
+base_model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-7B", 
+              torch_dtype=torch.bfloat16).to("cuda")
+base_model.eval()  # critical — never train this
+
+# Pre-compute and save log probs for every training sample
+import pickle
+
+def get_log_probs(model, tokenizer, text):
+    inputs = tokenizer(text, return_tensors="pt").to("cuda")
+    with torch.no_grad():
+        outputs = model(**inputs)
+        log_probs = torch.log_softmax(outputs.logits, dim=-1)
+    # Return token-level log probs
+    token_ids = inputs["input_ids"][0]
+    token_log_probs = log_probs[0, torch.arange(len(token_ids)-1), token_ids[1:]]
+    return token_log_probs.cpu()
+
+# Run this on your full training dataset and save
+# This takes ~1 hour but only runs ONCE
+behavior_log_probs = {}
+for i, sample in enumerate(your_dataset):
+    behavior_log_probs[i] = get_log_probs(base_model, tokenizer, sample["text"])
+    if i % 100 == 0:
+        print(f"{i} done")
+
+with open("behavior_log_probs.pkl", "wb") as f:
+    pickle.dump(behavior_log_probs, f)
+
+del base_model  # free VRAM before training starts
+torch.cuda.empty_cache()</div>
+    </div>
+    <div class="step">
+      <div class="step-num" style="background:#E1F5EE;color:#0F6E56">Step 2</div>
+      <div class="step-title">PEAR training with importance-weighted loss</div>
+      <div class="code">class PEARTrainer(SFTTrainer):
+    def __init__(self, behavior_log_probs, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.behavior_log_probs = behavior_log_probs
+    
+    def compute_loss(self, model, inputs, return_outputs=False):
+        # Standard forward pass
+        outputs = model(**inputs)
+        logits = outputs.logits
+        
+        # Get current model log probs
+        log_probs = torch.log_softmax(logits, dim=-1)
+        token_ids = inputs["input_ids"]
+        
+        # Get importance weights
+        batch_idx = inputs.get("idx", None)
+        if batch_idx is not None:
+            behavior_lp = self.behavior_log_probs[batch_idx.item()].to(logits.device)
+            current_lp = log_probs[0, torch.arange(len(token_ids[0])-1), token_ids[0][1:]]
+            
+            # Importance weight = ratio of current to behavior
+            importance_weights = torch.exp(current_lp - behavior_lp)
+            # Clip to prevent instability
+            importance_weights = torch.clamp(importance_weights, 0.1, 10.0)
+        else:
+            importance_weights = torch.ones(token_ids.shape[1]-1).to(logits.device)
+        
+        # Weighted cross-entropy loss
+        shift_logits = logits[..., :-1, :].contiguous()
+        shift_labels = token_ids[..., 1:].contiguous()
+        loss_fct = torch.nn.CrossEntropyLoss(reduction='none')
+        token_losses = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), 
+                                shift_labels.view(-1))
+        weighted_loss = (token_losses * importance_weights.view(-1)).mean()
+        
+        return (weighted_loss, outputs) if return_outputs else weighted_loss
+
+# Use exactly like SFTTrainer but with importance weights loaded
+trainer = PEARTrainer(
+    behavior_log_probs=behavior_log_probs,
+    model=model,
+    tokenizer=tokenizer,
+    train_dataset=your_combined_dataset,
+    # ... same args as before
+)</div>
+      <div class="ckpt">📌 Checkpoint action: Save every 200 steps. After full run, save 5 checkpoints (steps 400, 800, 1200, 1600, final) to HuggingFace with different commit messages. You'll pick the best one for GRPO next.</div>
+    </div>
+  </div>
+</div>
+
+<!-- PHASE 5 -->
+<div class="phase">
+  <div class="phase-head" onclick="toggle(this)">
+    <span class="phase-tag" style="background:#AFA9EC;color:#3C3489">Phase 5</span>
+    <div style="flex:1"><div class="phase-title">PROF-GRPO — Layer 2</div><div class="phase-sub">Sessions 4-5 · ~6-8 hours · the core RL stage</div></div>
+    <span class="chevron">›</span>
+  </div>
+  <div class="phase-body">
+    <div class="step">
+      <div class="step-num" style="background:#EEEDFE;color:#534AB7">What GRPO is</div>
+      <div class="step-title">RL that generates multiple answers and learns which ones were better</div>
+      <div class="step-body">For each question, GRPO generates 8 different answers (called rollouts). It then scores each answer (correct/wrong for GSM8K). Answers better than average get positive reward. Worse than average get negative reward. The model updates to produce more of the good answers. PROF adds a step-level PRM to also check whether each reasoning step was valid — not just the final answer.</div>
+    </div>
+    <div class="step">
+      <div class="step-num" style="background:#EEEDFE;color:#534AB7">Step 1</div>
+      <div class="step-title">Load best PEAR SFT checkpoint</div>
+      <div class="code">from peft import PeftModel
+from transformers import AutoModelForCausalLM
+
+# Load base + best PEAR adapter
+base = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-7B", 
+       torch_dtype=torch.bfloat16).to("cuda")
+model = PeftModel.from_pretrained(base, 
+        "your-username/riva-qwen-checkpoints")
+# Pick the checkpoint that gave best GSM8K improvement, not lowest loss</div>
+    </div>
+    <div class="step">
+      <div class="step-num" style="background:#EEEDFE;color:#534AB7">Step 2</div>
+      <div class="step-title">Define reward functions for each dataset</div>
+      <div class="code">import re
+
+def gsm8k_reward(completions, answers, **kwargs):
+    """Returns 1.0 if final answer matches, 0.0 if not"""
+    rewards = []
+    for completion, answer in zip(completions, answers):
+        # Extract number after ####
+        pred = re.search(r"####\s*([\d,.-]+)", completion)
+        gold = re.search(r"####\s*([\d,.-]+)", answer)
+        if pred and gold:
+            rewards.append(1.0 if pred.group(1).replace(",","") == 
+                          gold.group(1).replace(",","") else 0.0)
+        else:
+            rewards.append(0.0)
+    return rewards
+
+def strategyqa_reward(completions, answers, **kwargs):
+    """Yes/No binary reward"""
+    rewards = []
+    for completion, answer in zip(completions, answers):
+        pred = "yes" if "yes" in completion.lower()[-50:] else "no"
+        gold = answer.lower().strip()
+        rewards.append(1.0 if pred == gold else 0.0)
+    return rewards
+
+def mmlu_replay_reward(completions, answers, **kwargs):
+    """Multiple choice exact match"""
+    rewards = []
+    for completion, answer in zip(completions, answers):
+        pred_match = re.search(r"\b([ABCD])\b", completion[-100:])
+        pred = pred_match.group(1) if pred_match else "X"
+        rewards.append(1.0 if pred == answer else 0.0)
+    return rewards
+
+def combined_reward(completions, dataset_type, **kwargs):
+    if dataset_type == "gsm8k":
+        return gsm8k_reward(completions, **kwargs)
+    elif dataset_type == "strategyqa":
+        return strategyqa_reward(completions, **kwargs)
+    elif dataset_type == "mmlu":
+        return mmlu_replay_reward(completions, **kwargs)</div>
+    </div>
+    <div class="step">
+      <div class="step-num" style="background:#EEEDFE;color:#534AB7">Step 3</div>
+      <div class="step-title">GRPO training with dataset mixing</div>
+      <div class="code">from trl import GRPOTrainer, GRPOConfig
+
+# Dataset mixing: 60% GSM8K, 35% StrategyQA, 5% MMLU
+# Build combined dataset with dataset_type labels
+gsm8k_grpo = gsm8k_train.map(lambda x: {"dataset_type": "gsm8k", ...})
+stratqa_grpo = stratqa_train.map(lambda x: {"dataset_type": "strategyqa", ...})
+mmlu_replay = mmlu_cot.select(range(500)).map(lambda x: {"dataset_type": "mmlu", ...})
+
+from datasets import concatenate_datasets
+import random
+
+# Sample according to ratios
+grpo_dataset = concatenate_datasets([
+    gsm8k_grpo.select(range(6000)),    # 60%
+    stratqa_grpo.select(range(3500)),  # 35%
+    mmlu_replay.select(range(500)),    # 5%
+]).shuffle(seed=42)
+
+config = GRPOConfig(
+    max_prompt_length=512,
+    max_completion_length=1024,
+    num_generations=8,           # rollouts per question
+    learning_rate=5e-6,          # much lower than SFT
+    per_device_train_batch_size=1,
+    gradient_accumulation_steps=8,
+    max_steps=300,               # Qwen: 300 steps, Phi: 150 steps
+    save_steps=50,
+    logging_steps=10,
+    bf16=True,
+    report_to="wandb",
+    # Clip Higher for Phi only:
+    # cliprange=0.2, cliprange_value=0.28  
+)
+
+trainer = GRPOTrainer(
+    model=model,
+    config=config,
+    reward_funcs=[combined_reward],
+    train_dataset=grpo_dataset,
+)</div>
+      <div class="warn" style="background:var(--color-background-danger);color:var(--color-text-danger);border:0.5px solid var(--color-border-danger)">⚠ Phi-3-Mini only: add cliprange_value=0.28 to GRPOConfig. Watch entropy in wandb — if it drops below 0.5, stop immediately and revert.</div>
+      <div class="ckpt">📌 Checkpoint action: Save every 50 steps. After 300 steps run full eval. Compare to PEAR SFT checkpoint. If worse, use the PEAR SFT checkpoint for next phase instead.</div>
+    </div>
+  </div>
+</div>
+
+<!-- PHASE 6 -->
+<div class="phase">
+  <div class="phase-head" onclick="toggle(this)">
+    <span class="phase-tag" style="background:#FAC775;color:#633806">Phase 6</span>
+    <div style="flex:1"><div class="phase-title">MMLU boost — Layer 2.5</div><div class="phase-sub">Session 5 continued · ~1-2 hours · conditional for Qwen, mandatory for Phi</div></div>
+    <span class="chevron">›</span>
+  </div>
+  <div class="phase-body">
+    <div class="step">
+      <div class="step-num" style="background:#FAEEDA;color:#633806">Decision gate</div>
+      <div class="step-title">Check MMLU before running this phase</div>
+      <div class="step-body">Run MMLU eval after Phase 5. If MMLU improved by 3%+ already → skip this phase for Qwen. For Phi → always run this phase regardless of MMLU improvement.</div>
+    </div>
+    <div class="step">
+      <div class="step-num" style="background:#FAEEDA;color:#633806">Step 1</div>
+      <div class="step-title">Short MMLU-focused GRPO run</div>
+      <div class="code">mmlu_boost_config = GRPOConfig(
+    max_steps=100,              # Qwen: 100 steps. Phi: 80 steps
+    learning_rate=2e-6,         # lower than main GRPO
+    per_device_train_batch_size=1,
+    num_generations=4,          # fewer rollouts for speed
+    bf16=True,
+)
+
+# Dataset: 70% MMLU, 20% StrategyQA anchor, 10% GSM8K anchor
+mmlu_boost_dataset = concatenate_datasets([
+    mmlu_cot_grpo.select(range(1400)),   # 70%
+    stratqa_grpo.select(range(400)),     # 20%
+    gsm8k_grpo.select(range(200)),       # 10%
+]).shuffle(seed=42)
+
+# Use mmlu_replay_reward as reward function here
+# Train for 100 steps only then eval immediately
+# If GSM8K drops more than 1% → revert to pre-Layer-2.5 checkpoint</div>
+    </div>
+  </div>
+</div>
+
+<!-- PHASE 7 -->
+<div class="phase">
+  <div class="phase-head" onclick="toggle(this)">
+    <span class="phase-tag" style="background:#D3D1C7;color:#444441">Phase 7</span>
+    <div style="flex:1"><div class="phase-title">Curriculum reward shifting — Layer 3</div><div class="phase-sub">Session 6 · ~3-4 hours · your novel contribution</div></div>
+    <span class="chevron">›</span>
+  </div>
+  <div class="phase-body">
+    <div class="step">
+      <div class="step-num" style="background:#F1EFE8;color:#5F5E5A">Qwen: 3 stages</div>
+      <div class="step-title">Stage weights shift progressively</div>
+      <div class="code">def make_curriculum_reward(stage):
+    weights = {
+        1: {"format": 0.6, "accuracy": 0.3, "conciseness": 0.1},
+        2: {"format": 0.2, "accuracy": 0.7, "conciseness": 0.1},
+        3: {"format": 0.1, "accuracy": 0.4, "conciseness": 0.5},
+    }[stage]
+    
+    def reward_fn(completions, answers, dataset_type, **kwargs):
+        rewards = []
+        for completion, answer in zip(completions, answers):
+            # Format reward: has step-by-step structure?
+            fmt = 1.0 if len(completion.split('\n')) > 3 else 0.0
+            # Accuracy reward: correct answer?
+            acc = combined_reward([completion], [answer], dataset_type=[dataset_type])[0]
+            # Conciseness: exponential decay on length IF correct
+            length = len(completion.split())
+            concise = acc * max(0, 1 - (length / 200)) if acc > 0 else 0.0
+            
+            total = (weights["format"] * fmt + 
+                    weights["accuracy"] * acc + 
+                    weights["conciseness"] * concise)
+            rewards.append(total)
+        return rewards
+    return reward_fn
+
+# Stage 1: 100 steps
+# Stage 2: 150 steps (trigger when GSM8K accuracy plateaus for 25 steps)
+# Stage 3: 100 steps</div>
+    </div>
+    <div class="step">
+      <div class="step-num" style="background:#F1EFE8;color:#5F5E5A">Phi: 2 stages only</div>
+      <div class="step-title">Simpler — prevents collapse at 3.8B</div>
+      <div class="code"># Phi Stage A: format + accuracy combined (100 steps)
+phi_stage_a_weights = {"format": 0.4, "accuracy": 0.6, "conciseness": 0.0}
+
+# Phi Stage B: accuracy + conciseness (80 steps)
+phi_stage_b_weights = {"format": 0.0, "accuracy": 0.5, "conciseness": 0.5}</div>
+      <div class="ckpt">📌 Checkpoint action: Save after each stage transition. Log reward weights per step in wandb — this is your ablation evidence for the judges.</div>
+    </div>
+  </div>
+</div>
+
+<!-- PHASE 8 -->
+<div class="phase">
+  <div class="phase-head" onclick="toggle(this)">
+    <span class="phase-tag" style="background:#F5C4B3;color:#712B13">Phase 8</span>
+    <div style="flex:1"><div class="phase-title">Conditional conciseness + QAT — Layers 4 & 5</div><div class="phase-sub">Session 7 · ~2-3 hours · final polish</div></div>
+    <span class="chevron">›</span>
+  </div>
+  <div class="phase-body">
+    <div class="step">
+      <div class="step-num" style="background:#FAECE7;color:#712B13">Step 1</div>
+      <div class="step-title">Conciseness layer — accuracy-gated length penalty</div>
+      <div class="code">def conciseness_reward(completions, answers, dataset_type, **kwargs):
+    rewards = []
+    for completion, answer in zip(completions, answers):
+        acc = combined_reward([completion], [answer], 
+                             dataset_type=[dataset_type])[0]
+        if acc == 0:
+            rewards.append(-1.0)  # flat penalty for wrong
+        else:
+            # Exponential decay on length — only fires when correct
+            import math
+            length = len(completion.split())
+            length_reward = math.exp(-length / 150)  # 150 word target
+            rewards.append(length_reward)
+    return rewards
+
+# Run: Qwen 50-100 steps, Phi 30 steps maximum</div>
+    </div>
+    <div class="step">
+      <div class="step-num" style="background:#FAECE7;color:#712B13">Step 2</div>
+      <div class="step-title">QAT export with Unsloth Dynamic 2.0</div>
+      <div class="code">from unsloth import FastLanguageModel
+
+# Load your final LoRA checkpoint
+model, tokenizer = FastLanguageModel.from_pretrained(
+    model_name="your-username/riva-qwen-checkpoints",
+    max_seq_length=2048,
+)
+
+# Export to GGUF with Dynamic quantization
+model.save_pretrained_gguf(
+    "qwen-riva-final",
+    tokenizer,
+    quantization_method="q4_k_m",  # UD-Q4_K_XL equivalent
+)
+
+# Push quantized model
+model.push_to_hub_gguf(
+    "your-username/riva-qwen-final",
+    tokenizer,
+    quantization_method="q4_k_m",
+    token=os.environ["HF_TOKEN"],
+)</div>
+      <div class="ckpt">📌 Final checkpoint: Run complete eval on all 3 benchmarks. Build ablation table. Push everything to HuggingFace. You are done.</div>
+    </div>
+  </div>
+</div>
+
+<!-- PHASE 9 -->
+<div class="phase">
+  <div class="phase-head" onclick="toggle(this)">
+    <span class="phase-tag" style="background:#C0DD97;color:#27500A">Phase 9</span>
+    <div style="flex:1"><div class="phase-title">Final evaluation and ablation table</div><div class="phase-sub">Session 8 · ~2 hours · what wins competitions</div></div>
+    <span class="chevron">›</span>
+  </div>
+  <div class="phase-body">
+    <div class="step">
+      <div class="step-num" style="background:#EAF3DE;color:#3B6D11">Step 1</div>
+      <div class="step-title">Run eval on every saved checkpoint</div>
+      <div class="code">checkpoints = [
+    ("Baseline", "Qwen/Qwen2.5-7B"),
+    ("+ Basic SFT", "your-username/riva-qwen-checkpoints@basic-sft"),
+    ("+ PEAR SFT", "your-username/riva-qwen-checkpoints@pear-sft"),
+    ("+ PROF-GRPO", "your-username/riva-qwen-checkpoints@grpo-l2"),
+    ("+ MMLU boost", "your-username/riva-qwen-checkpoints@mmlu-boost"),
+    ("+ Curriculum", "your-username/riva-qwen-checkpoints@curriculum"),
+    ("+ Conciseness", "your-username/riva-qwen-checkpoints@final"),
+]
+
+# Run GSM8K, MMLU, StrategyQA on each
+# Build table:
+# Stage | GSM8K | MMLU | StrategyQA | Delta GSM8K | Delta MMLU | Delta StratQA
+# This table IS your submission. Judges look at this first.</div>
+    </div>
+    <div class="step">
+      <div class="step-num" style="background:#EAF3DE;color:#3B6D11">Session management summary</div>
+      <div class="step-title">Which phase runs in which Kaggle session</div>
+      <div style="margin-top:6px">
+        <table class="ds-table">
+          <tr><th>Session</th><th>Phase</th><th>Save to HF</th><th>Est. time</th></tr>
+          <tr><td>1</td><td>Phase 0 setup + Phase 1 baselines + Phase 2 MMLU CoT gen</td><td>mmlu-cot-20k, baseline scores</td><td>3-4 hrs</td></tr>
+          <tr><td>2</td><td>Phase 3 basic SFT</td><td>basic-sft checkpoint</td><td>4-5 hrs</td></tr>
+          <tr><td>3</td><td>Phase 4 PEAR SFT</td><td>pear-sft checkpoint ×5</td><td>6-8 hrs</td></tr>
+          <tr><td>4</td><td>Phase 5 PROF-GRPO (first 150 steps)</td><td>grpo-step150</td><td>6-8 hrs</td></tr>
+          <tr><td>5</td><td>Phase 5 GRPO (remaining) + Phase 6 MMLU boost</td><td>grpo-final, mmlu-boost</td><td>6-8 hrs</td></tr>
+          <tr><td>6</td><td>Phase 7 Curriculum all stages</td><td>curriculum-stageA, stageB, stageC</td><td>4-5 hrs</td></tr>
+          <tr><td>7</td><td>Phase 8 Conciseness + QAT export</td><td>riva-qwen-final (GGUF)</td><td>3-4 hrs</td></tr>
+          <tr><td>8</td><td>Phase 9 Full eval + ablation table</td><td>results.csv, ablation chart</td><td>2-3 hrs</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function toggle(head){
+  const body=head.nextElementSibling;
+  const chevron=head.querySelector('.chevron');
+  const open=body.classList.toggle('open');
+  chevron.style.transform=open?'rotate(90deg)':'none';
+}
+function switchTab(tab,id){
+  const tabs=tab.parentElement.querySelectorAll('.model-tab');
+  const contents=tab.closest('.step').querySelectorAll('.model-content');
+  tabs.forEach(t=>t.classList.remove('active'));
+  contents.forEach(c=>c.classList.remove('active'));
+  tab.classList.add('active');
+  document.getElementById(id).classList.add('active');
+}
+// Open first phase by default
+document.querySelector('.phase-head').click();
+</script>
