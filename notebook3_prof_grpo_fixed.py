@@ -161,8 +161,10 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 model.gradient_checkpointing_enable()
 
-print("Loading ref model (CPU)...")
-ref_model = copy.deepcopy(model).cpu()
+print("Loading ref model (separate load, not deepcopy)...")
+ref_model = AutoModelForCausalLM.from_pretrained(
+    START_CKPT, torch_dtype=torch.bfloat16
+).cpu()
 ref_model.eval()
 for p in ref_model.parameters():
     p.requires_grad_(False)
@@ -216,11 +218,12 @@ def score_with_prm(prompt, trace):
 
     # Fallback: use last token with pos/neg ids if available, else 0.5
     if not step_scores:
+        H_safe = max(H, 1)  # Ensure at least 1 step
         if pos_id is not None and neg_id is not None:
             fallback = torch.softmax(logits[-1][[pos_id, neg_id]], dim=0)[0].item()
         else:
             fallback = 0.5
-        step_scores = [fallback] * max(H, 1)
+        step_scores = [fallback] * H_safe
 
     return step_scores, float(np.mean(step_scores))
 
@@ -246,8 +249,9 @@ def prof_filter_correct_variant(rollouts_with_scores, n, m):
     # How many to remove from each group
     k_plus  = min(n_plus,  max(0, (delta + n - m + 1) // 2))
     k_minus = max(0, n - m - k_plus)
-    k_plus  = min(k_plus,  max(0, n_plus  - 1))
-    k_minus = min(k_minus, max(0, n_minus - 1))
+    # Ensure we keep at least 1 from each group if they exist
+    k_plus  = min(k_plus, n_plus - 1) if n_plus > 1 else 0
+    k_minus = min(k_minus, n_minus - 1) if n_minus > 1 else 0
 
     # Keep top-r_pro correct, bottom-r_pro incorrect (PROF logic)
     correct_sorted   = sorted(correct, key=lambda x: x[2], reverse=True)
@@ -264,7 +268,7 @@ def prof_filter_correct_variant(rollouts_with_scores, n, m):
 # ── GRPO loss ──────────────────────────────────────────────────────────
 def compute_grpo_loss(model, ref_model, tokenizer, prompt, kept_rollouts, advantages,
                       clip_low, clip_high, kl_coeff, entropy_coeff, max_len):
-    total_loss = torch.tensor(0.0, device="cuda", requires_grad=True)
+    total_loss = None  # Initialize to None, will be set in first iteration
     n_valid    = 0
 
     for (trace, ro, _), adv in zip(kept_rollouts, advantages):
@@ -305,13 +309,21 @@ def compute_grpo_loss(model, ref_model, tokenizer, prompt, kept_rollouts, advant
             torch.exp(lp_curr[t_start - 1:t_end - 1]) * lp_curr[t_start - 1:t_end - 1]
         ).sum(dim=-1).mean()
 
-        total_loss = total_loss + (ppo_loss + kl_loss + (-entropy_coeff * entropy))
-        n_valid   += 1
+        item_loss = ppo_loss + kl_loss + (-entropy_coeff * entropy)
+        
+        if total_loss is None:
+            total_loss = item_loss
+        else:
+            total_loss = total_loss + item_loss
+        n_valid += 1
 
-        del enc, enc_cpu, lp_curr, lp_ref, ratio, clipped
+        del enc, enc_cpu, lp_curr, lp_ref, ratio, clipped, item_loss
         torch.cuda.empty_cache()
 
-    return total_loss / max(1, n_valid)
+    if total_loss is None:
+        return torch.tensor(0.0, device="cuda")
+    
+    return total_loss / n_valid
 
 # ── Dataset — reads grpo_filtered_300 ─────────────────────────────────
 print("Loading GRPO dataset (pass@8-filtered questions)...")

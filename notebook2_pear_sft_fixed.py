@@ -400,8 +400,10 @@ class PEARDataset(Dataset):
             log_g = (T - 1 - t) * log_gamma + suffix_log_sum
             log_g = max(LOG_G_MIN, min(LOG_G_MAX, log_g))
             pear_weights[t] = torch.exp(torch.tensor(log_g))
-            # After computing weight for t, add delta[t] to suffix sum for positions < t
-            suffix_log_sum += deltas[t]
+            # CRITICAL FIX: Only add delta[t] to suffix AFTER computing weight for t
+            # The suffix sum for position t should NOT include delta[t] itself
+            if t > 0:  # Don't add for last iteration (t=0)
+                suffix_log_sum += deltas[t]
 
         # Negatives: use sequence-level weight only (paper §3.6)
         if role == "negative":
@@ -502,6 +504,9 @@ for step, batch in enumerate(dataloader):
 
         batch_loss += item_loss
         valid_items += 1
+        
+        # Free memory
+        del trace_logits, trace_targets, log_probs, token_nll, w
 
     if valid_items == 0:
         continue
